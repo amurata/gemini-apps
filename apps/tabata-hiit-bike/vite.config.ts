@@ -2,7 +2,6 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
-// https://vite.dev/config/
 export default defineConfig({
   base: '/',
   plugins: [
@@ -11,14 +10,14 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png'],
       manifest: {
-        name: 'Gemini Apps Portfolio',
-        short_name: 'GeminiApps',
-        description: 'Gemini generated applications portfolio with Tabata HIIT Bike PWA.',
+        name: 'Tabata HIIT Bike',
+        short_name: 'TabataHIIT',
+        description: 'ローラー台向けのTabataインターバル管理アプリ',
         theme_color: '#000000',
         background_color: '#000000',
         display: 'standalone',
         scope: '/',
-        start_url: '/apps/tabata-hiit-bike',
+        start_url: '/',
         icons: [
           {
             src: '/icons/icon-192.png',

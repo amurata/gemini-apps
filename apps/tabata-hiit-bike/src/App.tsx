@@ -11,7 +11,7 @@ const TOTAL_SETS = 8;
 // フェーズ定義
 type Phase = 'idle' | 'warmup' | 'tabata_sprint' | 'tabata_rest' | 'cooldown' | 'completed';
 
-const TabataHiitBikeApp = () => {
+const App = () => {
   const [phase, setPhase] = useState<Phase>('idle');
   const [timeLeft, setTimeLeft] = useState(0);
   const [currentSet, setCurrentSet] = useState(1);
@@ -338,4 +338,4 @@ const TabataHiitBikeApp = () => {
   );
 };
 
-export default TabataHiitBikeApp;
+export default App;

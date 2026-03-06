@@ -1,31 +1,41 @@
-# Gemini Apps Portfolio
+# Gemini Apps
 
-Gemini生成アプリを並べるポートフォリオ基盤です。現在は `Tabata HIIT Bike` を収録しています。
+Gemini生成アプリのポートフォリオ。各アプリは独立したPWAとしてサブドメインにデプロイされます。
 
-## Development
+## 構造
+
+```
+gemini-apps/
+├── src/                         # ポートフォリオTOP（arkatom.com）
+├── apps/
+│   ├── tabata-hiit-bike/        # Tabata HIIT Bike PWA
+│   └── media-viewer/            # Media Viewer PWA
+├── package.json                 # ポートフォリオ用
+├── vite.config.ts
+└── wrangler.toml
+```
+
+## 開発
+
+### ポートフォリオTOP
 
 ```bash
 npm install
 npm run dev
 ```
 
-## Routes
-
-- `/` : ポートフォリオTOP
-- `/apps/tabata-hiit-bike` : Tabata HIIT Bike
-
-## Build
+### 個別アプリ
 
 ```bash
-npm run build
-npm run preview
+cd apps/tabata-hiit-bike  # or apps/media-viewer
+npm install
+npm run dev
 ```
 
-## Cloudflare Pages
+## デプロイ（Cloudflare Pages）
 
-- Framework preset: `Vite`
-- Build command: `npm run build`
-- Build output directory: `dist`
-- Production branch: `main`
-
-`public/_redirects` で SPA fallback を設定しています。
+| サイト | ビルドルート | ビルドコマンド | 出力 |
+| --- | --- | --- | --- |
+| ポートフォリオ | `/` | `npm run build` | `dist` |
+| Tabata HIIT Bike | `apps/tabata-hiit-bike` | `npm run build` | `dist` |
+| Media Viewer | `apps/media-viewer` | `npm run build` | `dist` |

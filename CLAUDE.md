@@ -11,6 +11,10 @@
 - [Claude Code 公式ドキュメント](docs/official_docs)
 - [Claude API 公式ドキュメント](docs/api_docs)
 
+## ディレクトリ規約
+
+- `docs/` はリポジトリルート直下のみに配置。`apps/*/` 内に `docs/` を作成しない。
+
 ## 記録・管理
 
 - [ノート・日誌](.claude/instructions/note.md) - ノートの書き方

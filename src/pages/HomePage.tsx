@@ -1,5 +1,4 @@
-import { ArrowUpRight, Flame, Smartphone } from 'lucide-react'
-import { Link } from 'react-router-dom'
+import { ArrowUpRight, ExternalLink, Flame } from 'lucide-react'
 import { apps } from '../content/apps'
 
 const publishedApps = apps.filter((app) => app.status === 'published')
@@ -17,15 +16,17 @@ function HomePage() {
             生成アプリを実運用できる形で並べる
           </h1>
           <p className="mt-4 text-sm text-zinc-400 md:text-base">
-            Geminiが生成したアプリをReact/Viteで統合し、PWA対応した実験群として公開します。
+            Geminiが生成したアプリをReact/Viteで構築し、独立PWAとして公開しています。
           </p>
         </header>
 
         <section className="grid gap-5 md:grid-cols-2">
           {publishedApps.map((app) => (
-            <Link
+            <a
               key={app.id}
-              to={`/apps/${app.slug}`}
+              href={app.url}
+              target="_blank"
+              rel="noopener noreferrer"
               className="group rounded-2xl border border-zinc-800 bg-zinc-900/75 p-6 transition hover:-translate-y-0.5 hover:border-zinc-600 hover:bg-zinc-900"
             >
               <div className="mb-4 flex items-start justify-between gap-4">
@@ -46,13 +47,11 @@ function HomePage() {
                 ))}
               </div>
 
-              {app.pwaPrimary ? (
-                <p className="mt-5 inline-flex items-center gap-1 text-xs font-medium text-emerald-400">
-                  <Smartphone className="h-3.5 w-3.5" />
-                  PWA install targeted
-                </p>
-              ) : null}
-            </Link>
+              <p className="mt-5 inline-flex items-center gap-1 text-xs font-medium text-zinc-500">
+                <ExternalLink className="h-3.5 w-3.5" />
+                {new URL(app.url).hostname}
+              </p>
+            </a>
           ))}
         </section>
       </main>
