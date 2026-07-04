@@ -2,7 +2,7 @@ import type React from 'react'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import {
   Play, Pause, SkipBack, SkipForward, Mic, Square,
-  Volume2, ChevronDown, ChevronUp, Download, RotateCcw,
+  Volume2, ChevronDown, ChevronUp, Download, Share2, RotateCcw,
   BarChart3, X, Plus, Pencil, Trash2, Check
 } from 'lucide-react'
 import {
@@ -102,7 +102,7 @@ const STEPS = [
   { id: 'prep', title: '0. 事前準備', duration: 15, icon: '💧' },
   { id: 'rec1', title: '1. 最初の録音', duration: 40, icon: '🎙️' },
   { id: 'warmup', title: '2. 発声ウォームアップ', duration: 90, icon: '🫁' },
-  { id: 'reading', title: '3. 教養テキスト音読', duration: 180, icon: '📖' },
+  { id: 'reading', title: '3. 教養テキスト音読', duration: 195, icon: '📖' },
   { id: 'script', title: '4. 研修台本ブロック', duration: 180, icon: '🎯' },
   { id: 'drill', title: '5. 子音ドリル', duration: 90, icon: '👄' },
   { id: 'rec2', title: '6. 最後の録音＋評価', duration: 50, icon: '📊' },
@@ -224,21 +224,32 @@ function useMetronome() {
   return { bpm, setBpm, active, toggle, start, stop }
 }
 
+function getRecordingMime(): { mimeType: string; ext: string } {
+  if (typeof MediaRecorder !== 'undefined') {
+    if (MediaRecorder.isTypeSupported('audio/mp4')) return { mimeType: 'audio/mp4', ext: 'm4a' }
+    if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) return { mimeType: 'audio/webm;codecs=opus', ext: 'webm' }
+    if (MediaRecorder.isTypeSupported('audio/webm')) return { mimeType: 'audio/webm', ext: 'webm' }
+  }
+  return { mimeType: '', ext: 'webm' }
+}
+
 function useRecorder() {
   const [recording, setRecording] = useState(false)
   const [audioUrl, setAudioUrl] = useState<string | null>(null)
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null)
   const mediaRef = useRef<MediaRecorder | null>(null)
   const chunksRef = useRef<Blob[]>([])
+  const mimeInfo = useRef(getRecordingMime())
 
   const start = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-      mediaRef.current = new MediaRecorder(stream)
+      const options = mimeInfo.current.mimeType ? { mimeType: mimeInfo.current.mimeType } : undefined
+      mediaRef.current = new MediaRecorder(stream, options)
       chunksRef.current = []
       mediaRef.current.ondataavailable = (e) => chunksRef.current.push(e.data)
       mediaRef.current.onstop = () => {
-        const blob = new Blob(chunksRef.current, { type: 'audio/webm' })
+        const blob = new Blob(chunksRef.current, { type: mimeInfo.current.mimeType || 'audio/webm' })
         setAudioBlob(blob)
         setAudioUrl(URL.createObjectURL(blob))
         stream.getTracks().forEach(t => t.stop())
@@ -257,17 +268,24 @@ function useRecorder() {
     }
   }
 
-  const download = (filename: string) => {
+  const ext = mimeInfo.current.ext
+
+  const share = async (filename: string) => {
     if (!audioBlob) return
-    const a = document.createElement('a')
-    a.href = URL.createObjectURL(audioBlob)
-    a.download = filename
-    a.click()
+    const file = new File([audioBlob], filename, { type: audioBlob.type })
+    if (navigator.share && navigator.canShare?.({ files: [file] })) {
+      await navigator.share({ files: [file], title: filename })
+    } else {
+      const a = document.createElement('a')
+      a.href = URL.createObjectURL(audioBlob)
+      a.download = filename
+      a.click()
+    }
   }
 
   const clear = () => { setAudioUrl(null); setAudioBlob(null) }
 
-  return { recording, audioUrl, audioBlob, start, stop, download, clear }
+  return { recording, audioUrl, audioBlob, ext, start, stop, share, clear }
 }
 
 // ── Shared UI Components ──────────────────────────────────────────────────────
@@ -379,10 +397,10 @@ function RecorderControl({ rec, label }: { rec: ReturnType<typeof useRecorder>; 
         <div className="space-y-2">
           <audio controls src={rec.audioUrl} className="w-full h-10" />
           <button
-            onClick={() => rec.download(`${label}_${new Date().toISOString().slice(0, 10)}.webm`)}
+            onClick={() => rec.share(`${label}_${new Date().toISOString().slice(0, 10)}.${rec.ext}`)}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-slate-700 text-slate-400 text-xs hover:bg-slate-600 transition-colors"
           >
-            <Download className="w-3.5 h-3.5" /> ダウンロード保存
+            <Share2 className="w-3.5 h-3.5" /> 保存・共有
           </button>
         </div>
       )}
@@ -390,26 +408,6 @@ function RecorderControl({ rec, label }: { rec: ReturnType<typeof useRecorder>; 
   )
 }
 
-function PassGuide({ pass, setPass }: { pass: number; setPass: (v: number) => void }) {
-  const labels = ['1回目: 普通に読む', '2回目: オーバーに口を使う', '3回目: 意味を伝えるつもりで']
-  const colors = ['bg-slate-700 border-slate-500 text-slate-300', 'bg-amber-500/10 border-amber-500 text-amber-400', 'bg-green-500/10 border-green-500 text-green-400']
-  const inactiveStyle = 'bg-slate-900 border-transparent text-slate-600'
-
-  return (
-    <div className="flex gap-1.5 my-3">
-      {labels.map((l, i) => (
-        <button
-          key={i} onClick={() => setPass(i)}
-          className={`flex-1 text-center py-2.5 px-1 rounded-lg text-xs font-semibold border-2 transition-colors ${
-            i === pass ? colors[i] : inactiveStyle
-          }`}
-        >
-          {l}
-        </button>
-      ))}
-    </div>
-  )
-}
 
 // ── Step Components ───────────────────────────────────────────────────────────
 
@@ -433,6 +431,13 @@ function RecThemeCard({ themeIndex }: { themeIndex: number }) {
 }
 
 function StepRec1({ timer, rec, themeIndex }: { timer: ReturnType<typeof useTimer>; rec: ReturnType<typeof useRecorder>; themeIndex: number }) {
+  const prevRunning = useRef(false)
+  useEffect(() => {
+    if (timer.running && !prevRunning.current && !rec.recording) rec.start()
+    if (!timer.running && prevRunning.current && rec.recording) rec.stop()
+    prevRunning.current = timer.running
+  }, [timer.running, rec])
+
   return (
     <div className="space-y-4">
       <CoachPanel stepId="rec1" />
@@ -443,35 +448,93 @@ function StepRec1({ timer, rec, themeIndex }: { timer: ReturnType<typeof useTime
   )
 }
 
+const WARMUP_PHASES = [
+  { title: '① 無声の息', reps: 6, perRep: 5, duration: 30, desc: '鼻から吸って、口から静かに吐く。1回5秒。' },
+  { title: '② 「んー」', reps: 8, perRep: 3, duration: 30, desc: '3秒ずつ。口は軽く閉じ、唇か前歯の裏あたりが振動する感じを探す。' },
+  { title: '③ んーま/み/む', reps: 10, perRep: 3, duration: 30, desc: '「ん」の楽さを保ったまま後ろの音を足す。ま→み→む→ま…の順で繰り返す。' },
+]
+
 function StepWarmup({ timer }: { timer: ReturnType<typeof useTimer> }) {
-  const [phase, setPhase] = useState(0)
-  const phases = [
-    { title: '① 無声の息 ×3', desc: '鼻から吸って、口から静かに吐く。1回3秒くらい。' },
-    { title: '② 「んー」×5', desc: '2秒ずつ。口は軽く閉じ、唇か前歯の裏あたりが少し振動する感じを探す。声は小さすぎず大きすぎず。' },
-    { title: '③ んーま/み/む', desc: '「ん」の楽さを保ったまま、後ろの音を足す。きつくなるならすぐ戻す。' },
-  ]
+  const totalDuration = WARMUP_PHASES.reduce((s, p) => s + p.duration, 0)
+  const elapsed = totalDuration - timer.seconds
+
+  let phase = 0
+  let phaseElapsed = elapsed
+  for (let i = 0; i < WARMUP_PHASES.length; i++) {
+    if (phaseElapsed < WARMUP_PHASES[i].duration) {
+      phase = i
+      break
+    }
+    phaseElapsed -= WARMUP_PHASES[i].duration
+    if (i === WARMUP_PHASES.length - 1) {
+      phase = WARMUP_PHASES.length - 1
+      phaseElapsed = WARMUP_PHASES[i].duration
+    }
+  }
+
+  const p = WARMUP_PHASES[phase]
+  const currentRep = timer.running || timer.done
+    ? Math.min(Math.floor(phaseElapsed / p.perRep) + 1, p.reps)
+    : 0
+  const phaseTimeLeft = p.duration - phaseElapsed
 
   return (
     <div className="space-y-4">
       <CoachPanel stepId="warmup" />
+
       <div className="flex gap-1.5">
-        {phases.map((p, i) => (
-          <button
-            key={i} onClick={() => setPhase(i)}
-            className={`flex-1 py-2.5 px-1 rounded-lg text-xs font-semibold transition-colors ${
-              i === phase ? 'bg-blue-900 text-blue-200' : 'bg-slate-800 text-slate-500'
+        {WARMUP_PHASES.map((wp, i) => (
+          <div
+            key={i}
+            className={`flex-1 py-2.5 px-1 rounded-lg text-xs font-semibold text-center transition-colors ${
+              i === phase ? 'bg-blue-900 text-blue-200' : i < phase ? 'bg-green-900/50 text-green-400' : 'bg-slate-800 text-slate-500'
             }`}
           >
-            {p.title}
-          </button>
+            {wp.title}
+          </div>
         ))}
       </div>
-      <div className="bg-slate-800 rounded-xl p-5">
-        <p className="text-slate-200 text-base leading-relaxed">{phases[phase].desc}</p>
+
+      <div className="bg-slate-800 rounded-xl p-5 space-y-4">
+        <p className="text-slate-200 text-base leading-relaxed">{p.desc}</p>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            {Array.from({ length: p.reps }, (_, i) => (
+              <div
+                key={i}
+                className={`w-3 h-3 rounded-full transition-colors ${
+                  i < currentRep ? 'bg-blue-400' : 'bg-slate-700'
+                }`}
+              />
+            ))}
+          </div>
+          <span className="text-sm font-mono text-slate-400">
+            {currentRep}/{p.reps}回
+            {timer.running && <span className="ml-2 text-blue-400">残{phaseTimeLeft}秒</span>}
+          </span>
+        </div>
       </div>
+
       <TimerDisplay timer={timer} />
     </div>
   )
+}
+
+function useReadingSchedule(texts: TextItem[], totalDuration: number) {
+  const totalChars = texts.reduce((s, t) => s + Math.max(t.text.length, 20), 0)
+  const perPassDuration = Math.floor(totalDuration / 3)
+
+  const textDurations = texts.map(t => {
+    const chars = Math.max(t.text.length, 20)
+    return Math.max(8, Math.round(perPassDuration * (chars / totalChars)))
+  })
+  // 端数をラストに吸収
+  const sumPerPass = textDurations.reduce((s, d) => s + d, 0)
+  textDurations[textDurations.length - 1] += perPassDuration - sumPerPass
+
+  const passLabels = ['1回目: 普通に読む', '2回目: オーバーに口を使う', '3回目: 意味を伝えるつもりで']
+
+  return { textDurations, perPassDuration, passLabels }
 }
 
 function StepReading({
@@ -487,25 +550,68 @@ function StepReading({
   onAddText: (item: TextItem) => void
   onRemoveText: (idx: number) => void
 }) {
-  const [pass, setPass] = useState(0)
   const [editing, setEditing] = useState(false)
   const [addMode, setAddMode] = useState(false)
   const [newText, setNewText] = useState({ title: '短歌', text: '', author: '' })
-  const current = texts[selectedText] || texts[0]
+
+  const initDuration = STEPS.find(s => s.id === 'reading')!.duration
+  const { textDurations, perPassDuration, passLabels } = useReadingSchedule(texts, initDuration)
+
+  // タイマー経過から現在のパス・テキストを自動計算
+  const elapsed = initDuration - timer.seconds
+  let pass = Math.min(Math.floor(elapsed / perPassDuration), 2)
+  let passElapsed = elapsed - pass * perPassDuration
+
+  let autoTextIdx = 0
+  let textTimeLeft = 0
+  let cumulative = 0
+  for (let i = 0; i < textDurations.length; i++) {
+    if (passElapsed < cumulative + textDurations[i]) {
+      autoTextIdx = i
+      textTimeLeft = cumulative + textDurations[i] - passElapsed
+      break
+    }
+    cumulative += textDurations[i]
+    if (i === textDurations.length - 1) {
+      autoTextIdx = i
+      textTimeLeft = 0
+    }
+  }
+
+  const activeIdx = timer.running || timer.done ? autoTextIdx : selectedText
+  const activePass = timer.running || timer.done ? pass : 0
+  const current = texts[activeIdx] || texts[0]
 
   const getLabel = (t: TextItem) =>
     t.title === '短歌' ? '歌' : t.title === '名言' ? '言' : '古'
+
+  const passColors = ['text-slate-300', 'text-amber-400', 'text-green-400']
 
   return (
     <div className="space-y-4">
       <CoachPanel stepId="reading" />
 
+      {/* Pass indicator */}
+      <div className="flex gap-1.5">
+        {passLabels.map((l, i) => (
+          <div
+            key={i}
+            className={`flex-1 py-2 px-1 rounded-lg text-xs font-semibold text-center transition-colors ${
+              i === activePass ? 'bg-blue-900 text-blue-200' : i < activePass ? 'bg-green-900/50 text-green-400' : 'bg-slate-800 text-slate-500'
+            }`}
+          >
+            {l}
+          </div>
+        ))}
+      </div>
+
+      {/* Text selector + edit buttons */}
       <div className="flex gap-1.5 flex-wrap items-center">
         {texts.map((t, i) => (
           <button
             key={t.id} onClick={() => setSelectedText(i)}
             className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-              i === selectedText ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+              i === activeIdx ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
             }`}
           >
             {getLabel(t)} {t.author ? t.author.slice(0, 3) : ''}
@@ -560,18 +666,18 @@ function StepReading({
         <div className="bg-slate-800 rounded-xl p-4 space-y-3">
           <textarea
             value={current.text}
-            onChange={e => onEditText(selectedText, 'text', e.target.value)}
+            onChange={e => onEditText(activeIdx, 'text', e.target.value)}
             className="w-full p-2.5 rounded-lg bg-slate-900 text-slate-200 border border-slate-700 text-sm min-h-[80px] resize-y"
           />
           <div className="flex gap-2 items-center">
             <input
               value={current.author || ''}
-              onChange={e => onEditText(selectedText, 'author', e.target.value)}
+              onChange={e => onEditText(activeIdx, 'author', e.target.value)}
               placeholder="作者"
               className="flex-1 p-2 rounded-lg bg-slate-900 text-slate-200 border border-slate-700 text-sm"
             />
             {current.id.startsWith('custom') && (
-              <button onClick={() => { onRemoveText(selectedText); setEditing(false) }} className="p-2 rounded-lg bg-red-600/20 text-red-400 hover:bg-red-600/30">
+              <button onClick={() => { onRemoveText(activeIdx); setEditing(false) }} className="p-2 rounded-lg bg-red-600/20 text-red-400 hover:bg-red-600/30">
                 <Trash2 className="w-4 h-4" />
               </button>
             )}
@@ -579,12 +685,15 @@ function StepReading({
         </div>
       ) : (
         <div className="bg-slate-800 rounded-xl p-5 border-l-4 border-blue-500">
+          <div className="flex justify-between items-start mb-2">
+            <span className={`text-xs font-bold ${passColors[activePass]}`}>{passLabels[activePass]}</span>
+            {timer.running && <span className="text-xs font-mono text-blue-400">残{textTimeLeft}秒</span>}
+          </div>
           <p className="text-lg text-slate-100 leading-loose font-medium">{current.text}</p>
           {current.author && <p className="text-right text-slate-500 text-sm mt-2 italic">— {current.author}</p>}
         </div>
       )}
 
-      <PassGuide pass={pass} setPass={setPass} />
       <MetronomeControl metro={metro} />
       <TimerDisplay timer={timer} metro={metro} />
     </div>
@@ -599,32 +708,78 @@ function StepScript({
   scripts: Scripts
   onEditScript: (key: string, value: string) => void
 }) {
-  const [pass, setPass] = useState(0)
   const [editing, setEditing] = useState(false)
   const sections = [
-    { key: 'intro' as const, label: '冒頭', color: 'border-blue-500 text-blue-400' },
-    { key: 'main' as const, label: '重要説明', color: 'border-amber-500 text-amber-400' },
-    { key: 'conclusion' as const, label: '結論', color: 'border-green-500 text-green-400' },
+    { key: 'intro' as const, label: '冒頭', borderColor: 'border-blue-500', textColor: 'text-blue-400' },
+    { key: 'main' as const, label: '重要説明', borderColor: 'border-amber-500', textColor: 'text-amber-400' },
+    { key: 'conclusion' as const, label: '結論', borderColor: 'border-green-500', textColor: 'text-green-400' },
   ]
-  const [section, setSection] = useState(0)
-  const cur = sections[section]
 
-  const btnColors = ['bg-blue-600', 'bg-amber-600', 'bg-green-600']
+  const passLabels = ['1回目: 普通に読む', '2回目: オーバーに口を使う', '3回目: 意味を伝えるつもりで']
+  const initDuration = STEPS.find(s => s.id === 'script')!.duration
+
+  // 文字数で比例配分
+  const scriptTexts = sections.map(s => scripts[s.key])
+  const totalChars = scriptTexts.reduce((sum, t) => sum + Math.max(t.length, 20), 0)
+  const perPassDuration = Math.floor(initDuration / 3)
+  const sectionDurations = sections.map((_, i) => {
+    const chars = Math.max(scriptTexts[i].length, 20)
+    return Math.max(8, Math.round(perPassDuration * (chars / totalChars)))
+  })
+  const sumPerPass = sectionDurations.reduce((s, d) => s + d, 0)
+  sectionDurations[sectionDurations.length - 1] += perPassDuration - sumPerPass
+
+  const elapsed = initDuration - timer.seconds
+  const pass = Math.min(Math.floor(elapsed / perPassDuration), 2)
+  const passElapsed = elapsed - pass * perPassDuration
+
+  let autoSection = 0
+  let sectionTimeLeft = 0
+  let cum = 0
+  for (let i = 0; i < sectionDurations.length; i++) {
+    if (passElapsed < cum + sectionDurations[i]) {
+      autoSection = i
+      sectionTimeLeft = cum + sectionDurations[i] - passElapsed
+      break
+    }
+    cum += sectionDurations[i]
+    if (i === sectionDurations.length - 1) { autoSection = i; sectionTimeLeft = 0 }
+  }
+
+  const activeSection = timer.running || timer.done ? autoSection : 0
+  const activePass = timer.running || timer.done ? pass : 0
+  const cur = sections[activeSection]
+  const passColors = ['text-slate-300', 'text-amber-400', 'text-green-400']
 
   return (
     <div className="space-y-4">
       <CoachPanel stepId="script" />
 
+      {/* Pass indicator */}
+      <div className="flex gap-1.5">
+        {passLabels.map((l, i) => (
+          <div
+            key={i}
+            className={`flex-1 py-2 px-1 rounded-lg text-xs font-semibold text-center transition-colors ${
+              i === activePass ? 'bg-blue-900 text-blue-200' : i < activePass ? 'bg-green-900/50 text-green-400' : 'bg-slate-800 text-slate-500'
+            }`}
+          >
+            {l}
+          </div>
+        ))}
+      </div>
+
+      {/* Section tabs */}
       <div className="flex gap-1.5">
         {sections.map((s, i) => (
-          <button
-            key={s.key} onClick={() => setSection(i)}
-            className={`flex-1 py-2.5 rounded-lg text-xs font-semibold transition-colors ${
-              i === section ? `${btnColors[i]} text-white` : 'bg-slate-800 text-slate-500'
+          <div
+            key={s.key}
+            className={`flex-1 py-2 rounded-lg text-xs font-semibold text-center transition-colors ${
+              i === activeSection ? `bg-slate-700 ${s.textColor}` : i < activeSection ? 'bg-green-900/30 text-green-500' : 'bg-slate-800 text-slate-600'
             }`}
           >
             {s.label}
-          </button>
+          </div>
         ))}
         <button onClick={() => setEditing(!editing)} className="p-2 rounded-lg bg-slate-800 text-slate-400 hover:bg-slate-700">
           <Pencil className="w-4 h-4" />
@@ -638,13 +793,16 @@ function StepScript({
           className="w-full p-3 rounded-xl bg-slate-900 text-slate-200 border border-slate-700 text-sm min-h-[120px] resize-y"
         />
       ) : (
-        <div className={`bg-slate-800 rounded-xl p-5 border-l-4 ${cur.color.split(' ')[0]}`}>
-          <p className={`text-xs font-bold uppercase tracking-wider mb-2 ${cur.color.split(' ')[1]}`}>台本: {cur.label}</p>
+        <div className={`bg-slate-800 rounded-xl p-5 border-l-4 ${cur.borderColor}`}>
+          <div className="flex justify-between items-start mb-2">
+            <span className={`text-xs font-bold ${passColors[activePass]}`}>{passLabels[activePass]}</span>
+            {timer.running && <span className="text-xs font-mono text-blue-400">残{sectionTimeLeft}秒</span>}
+          </div>
+          <p className={`text-xs font-bold uppercase tracking-wider mb-2 ${cur.textColor}`}>台本: {cur.label}</p>
           <p className="text-slate-200 text-base leading-loose">{scripts[cur.key]}</p>
         </div>
       )}
 
-      <PassGuide pass={pass} setPass={setPass} />
       <MetronomeControl metro={metro} />
       <TimerDisplay timer={timer} metro={metro} />
     </div>
@@ -699,8 +857,37 @@ function StepDrill({
   const [manualSelection, setManualSelection] = useState<string[] | null>(null)
   const [editing, setEditing] = useState(false)
   const todayDrills = manualSelection || scheduled || ['カ行', 'サ行']
-  const [activeDrill, setActiveDrill] = useState(0)
-  const current = drills[todayDrills[activeDrill]] || drills['カ行']
+
+  const initDuration = STEPS.find(s => s.id === 'drill')!.duration
+  // 各ドリル内で 五十音(10秒) → 単語(10秒) → 短文(残り) の3段階
+  const drillCount = todayDrills.length
+  const perDrillDuration = Math.floor(initDuration / drillCount)
+  const subSteps = [
+    { label: '① 五十音', duration: 10 },
+    { label: '② 実務単語', duration: 10 },
+    { label: '③ 短文', duration: perDrillDuration - 20 },
+  ]
+
+  const elapsed = initDuration - timer.seconds
+  const autoDrillIdx = Math.min(Math.floor(elapsed / perDrillDuration), drillCount - 1)
+  const drillElapsed = elapsed - autoDrillIdx * perDrillDuration
+
+  let autoSubStep = 0
+  let subTimeLeft = 0
+  let cum = 0
+  for (let i = 0; i < subSteps.length; i++) {
+    if (drillElapsed < cum + subSteps[i].duration) {
+      autoSubStep = i
+      subTimeLeft = cum + subSteps[i].duration - drillElapsed
+      break
+    }
+    cum += subSteps[i].duration
+    if (i === subSteps.length - 1) { autoSubStep = i; subTimeLeft = 0 }
+  }
+
+  const activeDrillIdx = timer.running || timer.done ? autoDrillIdx : 0
+  const activeSubStep = timer.running || timer.done ? autoSubStep : -1
+  const current = drills[todayDrills[activeDrillIdx]] || drills['カ行']
 
   if (isSunday) {
     return (
@@ -711,6 +898,8 @@ function StepDrill({
       </div>
     )
   }
+
+  const borderColors = ['border-indigo-400', 'border-violet-400', 'border-purple-400']
 
   return (
     <div className="space-y-4">
@@ -730,16 +919,18 @@ function StepDrill({
         <SaturdayDrillPicker drills={drills} selection={manualSelection} onSelect={setManualSelection} />
       )}
 
+      {/* Drill tabs */}
       <div className="flex gap-2">
         {todayDrills.map((d, i) => (
-          <button
-            key={d} onClick={() => setActiveDrill(i)}
-            className={`flex-1 py-3 rounded-xl text-base font-bold transition-colors ${
-              i === activeDrill ? 'bg-blue-900 text-blue-200' : 'bg-slate-800 text-slate-500'
+          <div
+            key={d}
+            className={`flex-1 py-3 rounded-xl text-base font-bold text-center transition-colors ${
+              i === activeDrillIdx ? 'bg-blue-900 text-blue-200' : i < activeDrillIdx ? 'bg-green-900/50 text-green-400' : 'bg-slate-800 text-slate-500'
             }`}
           >
             {d}
-          </button>
+            {timer.running && i === activeDrillIdx && <span className="ml-2 text-xs font-mono text-blue-400">残{subTimeLeft}秒</span>}
+          </div>
         ))}
       </div>
 
@@ -748,30 +939,33 @@ function StepDrill({
           <label className="text-slate-500 text-xs">単語（カンマ区切り）</label>
           <input
             value={current.words.join('、')}
-            onChange={e => onEditDrill(todayDrills[activeDrill], 'words', e.target.value.split(/[、,]/))}
+            onChange={e => onEditDrill(todayDrills[activeDrillIdx], 'words', e.target.value.split(/[、,]/))}
             className="w-full p-2.5 rounded-lg bg-slate-900 text-slate-200 border border-slate-700 text-sm"
           />
           <label className="text-slate-500 text-xs">短文</label>
           <input
             value={current.sentence}
-            onChange={e => onEditDrill(todayDrills[activeDrill], 'sentence', e.target.value)}
+            onChange={e => onEditDrill(todayDrills[activeDrillIdx], 'sentence', e.target.value)}
             className="w-full p-2.5 rounded-lg bg-slate-900 text-slate-200 border border-slate-700 text-sm"
           />
         </div>
       ) : (
         <div className="space-y-2">
-          <div className="bg-slate-800 rounded-xl p-4 border-l-4 border-indigo-400">
-            <p className="text-xs font-bold text-blue-400 mb-1">① 五十音</p>
-            <p className="text-slate-200 text-xl tracking-[0.5em] font-light py-1">{current.sounds}</p>
-          </div>
-          <div className="bg-slate-800 rounded-xl p-4 border-l-4 border-violet-400">
-            <p className="text-xs font-bold text-blue-400 mb-1">② 実務単語</p>
-            <p className="text-slate-200 text-lg py-0.5">{current.words.join('　　')}</p>
-          </div>
-          <div className="bg-slate-800 rounded-xl p-4 border-l-4 border-purple-400">
-            <p className="text-xs font-bold text-blue-400 mb-1">③ 短文</p>
-            <p className="text-slate-200 text-base leading-relaxed py-0.5">{current.sentence}</p>
-          </div>
+          {[
+            { label: '① 五十音', content: <p className="text-slate-200 text-xl tracking-[0.5em] font-light py-1">{current.sounds}</p> },
+            { label: '② 実務単語', content: <p className="text-slate-200 text-lg py-0.5">{current.words.join('　　')}</p> },
+            { label: '③ 短文', content: <p className="text-slate-200 text-base leading-relaxed py-0.5">{current.sentence}</p> },
+          ].map((item, i) => (
+            <div
+              key={i}
+              className={`bg-slate-800 rounded-xl p-4 border-l-4 ${borderColors[i]} transition-opacity ${
+                activeSubStep >= 0 && activeSubStep !== i ? 'opacity-30' : ''
+              }`}
+            >
+              <p className="text-xs font-bold text-blue-400 mb-1">{item.label}</p>
+              {item.content}
+            </div>
+          ))}
         </div>
       )}
 
@@ -791,6 +985,13 @@ function StepRec2({
   history: HistoryEntry[]
   themeIndex: number
 }) {
+  const prevRunning = useRef(false)
+  useEffect(() => {
+    if (timer.running && !prevRunning.current && !rec.recording) rec.start()
+    if (!timer.running && prevRunning.current && rec.recording) rec.stop()
+    prevRunning.current = timer.running
+  }, [timer.running, rec])
+
   const metrics = [
     { key: 'clarity' as const, label: '明瞭度', desc: 'はっきり聞こえるか', color: 'bg-blue-600' },
     { key: 'ease' as const, label: '楽さ', desc: 'のどに負担がないか', color: 'bg-green-600' },
@@ -906,6 +1107,33 @@ export default function App() {
     rec2.clear()
     metro.stop()
   }
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement).tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return
+
+      if (e.code === 'Space') {
+        e.preventDefault()
+        if (sessionComplete) return
+        if (showHistory) return
+        if (timer.done) {
+          goNext()
+        } else {
+          timer.toggle()
+        }
+      } else if (e.code === 'ArrowRight') {
+        e.preventDefault()
+        if (!sessionComplete && !showHistory) goNext()
+      } else if (e.code === 'ArrowLeft') {
+        e.preventDefault()
+        if (!sessionComplete && !showHistory) goPrev()
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  })
 
   const onEditText = (idx: number, field: string, value: string) => {
     setTexts(t => t.map((item, i) => (i === idx ? { ...item, [field]: value } : item)))
