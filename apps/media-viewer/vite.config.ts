@@ -39,7 +39,10 @@ export default defineConfig({
         ],
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,ico,png,svg,webmanifest}'],
+        // PDF.js の worker (.mjs) もオフライン用にプリキャッシュ
+        globPatterns: ['**/*.{js,css,html,ico,png,svg,webmanifest,mjs}'],
+        // pdfjs 本体・worker は 2MB を超えるためキャッシュ上限を引き上げ
+        maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
       },
     }),
   ],
